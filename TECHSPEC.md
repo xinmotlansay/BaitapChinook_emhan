@@ -1,35 +1,27 @@
-# TECHSPEC — Dự báo doanh thu (Tổng, theo Album, theo Track) — Chinook
+# TECHSPEC — Hệ gợi ý Album & Track cho Customer (Chinook)
 
 | | |
 |---|---|
-| Phiên bản | 1.0 (bản thiết kế, chưa huấn luyện chính thức) |
+| Phiên bản | 1.0 (bản thiết kế hoàn chỉnh; chưa huấn luyện chính thức) |
 | Ngày | 2026-10-22 |
 | Loại dự án | Bài tập môn Học máy |
-| Ngôn ngữ / UI | Python 3.11+, PySide6 + Qt Designer (`.ui`), giao diện tiếng Việt |
-| Thư viện | pandas, numpy, scikit-learn, lightgbm, statsmodels, matplotlib, PySide6, scipy |
+| Ngôn ngữ / UI | Python 3.11+, **PyQt6** + Qt Designer (`.ui`), giao diện tiếng Việt |
+| Thư viện | pandas, numpy, scikit-learn, lightgbm, matplotlib, PyQt6, scipy |
 | Dữ liệu | `databases/Chinook_Sqlite.sqlite` (chỉ đọc) |
 
 ---
 
 ## 1. Mục tiêu & phạm vi
 
-**Mục tiêu:** Dự báo doanh thu **12 tháng tiếp theo** ở ba cấp, và bảo đảm ba cấp khớp nhau (tổng track = tổng album = tổng toàn cửa hàng):
-
-| Cấp | Đối tượng dự báo | Đơn vị thời gian |
-|---|---|---|
-| Tổng | Doanh thu toàn cửa hàng | Từng tháng (h = 1…12) |
-| Album | Doanh thu của từng album | Tổng 12 tháng |
-| Track | Doanh thu của từng track | Tổng 12 tháng |
-
-Doanh thu = `UnitPrice × Quantity` của `InvoiceLine`. Tổng này trùng `Invoice.Total` (đã kiểm: 0 hóa đơn lệch).
+**Mục tiêu:** Với mỗi customer, gợi ý Top-K **album** họ có khả năng mua tiếp. Với mỗi album được gợi ý, hiển thị các **track chưa mua**, xếp theo mức phù hợp do mô hình track dự đoán, kèm lý do gợi ý.
 
 **Gồm:**
-- Huấn luyện offline: làm sạch → dựng chuỗi → chia theo *origin* thời gian → chọn tham số trên validation → huấn luyện → đánh giá → hòa giải phân cấp → đóng gói model.
-- Ứng dụng desktop một màn hình: xem lịch sử và dự báo kèm khoảng dự báo ở cả ba cấp, chỉ nạp model đã đóng gói.
+- Huấn luyện offline: làm sạch → chia train/test 80/20 theo thời gian → chọn tham số trên validation → huấn luyện → đánh giá → đóng gói model.
+- Ứng dụng desktop một cửa sổ: gợi ý cho khách đã có và khách mới, xem kết quả đánh giá mô hình, chỉ nạp model đã đóng gói để suy luận.
 
-**Không gồm:** API/server, deep learning, cập nhật dữ liệu thời gian thực, đóng gói `.exe`, dự báo theo quốc gia hoặc khách hàng, dự báo album/track mới chưa có trong catalog, huấn luyện lại từ giao diện.
+**Không gồm:** API/server, deep learning, cập nhật dữ liệu thời gian thực, đóng gói `.exe`, danh sách track gợi ý độc lập (track chỉ xuất hiện trong album đã chọn), huấn luyện lại từ giao diện.
 
-**Kỳ vọng:** dữ liệu nhỏ, rất thưa và có cấu trúc sinh khá đều (§2). Mục tiêu là *quy trình dự báo đúng, so sánh công bằng với baseline đơn giản, kết luận trung thực* (kể cả kết luận "không mô hình nào vượt baseline" ở cấp Tổng), không phải sai số thấp bằng mọi giá.
+**Kỳ vọng:** dữ liệu nhỏ (59 customer) nên mục tiêu là *quy trình ML đúng, so sánh công bằng với baseline, kết luận trung thực kèm khoảng tin cậy*.
 
 ---
 
@@ -37,33 +29,26 @@ Doanh thu = `UnitPrice × Quantity` của `InvoiceLine`. Tổng này trùng `Inv
 
 | Hạng mục | Giá trị |
 |---|---|
-| Hóa đơn / dòng hóa đơn | 412 / 2.240 (`Quantity` luôn = 1) |
-| Tổng doanh thu | 2.328,60 |
-| Thời gian | 2009-01-01 → 2013-12-22 (60 tháng) |
-| Doanh thu theo năm | 449,46 · 481,45 · 469,58 · 477,53 · 450,58 (2009→2013) |
-| Doanh thu tháng | trung bình 38,81; độ lệch chuẩn 4,74 (CV 12,2%); **72% số tháng đúng bằng 37,62** |
-| Hóa đơn mỗi tháng | 5–7 (trung bình 6,87) |
-| Hóa đơn mỗi customer | 6–7; kích thước (số dòng) theo khuôn cố định 1, 2, 2, 4, 6, 9, 14 = 38 dòng |
-| Giá dòng | 0,99 (2.129 dòng) hoặc 1,99 (111 dòng video/TV) |
-| Track có bán / tổng | 1.984 / 3.503; 1.728 track bán 1 lần, 256 track bán 2 lần |
-| Doanh thu mỗi track | 0,99 (1.633) · 1,98 (248) · 1,99 (95) · 3,98 (8) |
-| Khoảng cách giữa hai lần bán cùng một track | tối thiểu 473 ngày, trung vị 934 ngày |
-| Album có bán / tổng | 304 / 347; doanh thu mỗi album: trung bình 7,66, trung vị 6,93, lớn nhất 35,82 |
-| Tương quan doanh thu album với số track / số người mua | 0,82 / 0,83 |
-| Độ thưa | album–tháng: 5,3% ô khác 0; track–tháng: 1,07% ô khác 0 |
-| Album có doanh thu 0 trong một năm | khoảng 30% (mỗi năm) |
-| Tương quan doanh thu album năm n và n+1 | 0,13 · 0,41 · 0,30 · 0,12 (yếu) |
-| Năm 2013: track có bán / chưa từng bán trước đó | 442 / 313 (71%); 29% doanh thu track 2013 đến từ track đã bán trước đó |
-| Năm 2013: album có bán đã từng bán trước đó | 205 / 205 (100%) |
-| Null | Không có null ảnh hưởng doanh thu |
+| Customer / Track / Album / Artist / Genre | 59 / 3.503 / 347 / 275 / 25 |
+| Dòng hóa đơn (`InvoiceLine`) | 2.240, `Quantity` luôn = 1, không trùng (customer, track) |
+| Cặp (customer, album) có mua | 1.301; trung bình 1,72 track mỗi cặp |
+| Mỗi customer | 18–27 album (trung bình 22), 6–7 invoice |
+| Thời gian | 2009-01-01 → 2013-12-22 |
+| Track | 1.728/1.984 track bán chỉ 1 người mua; tối đa 2 người/track |
+| Album | 304/347 album có người mua; **119 album có đúng 4 người mua, 39 album chỉ 1 người** |
+| Mua lại cùng album ở hóa đơn khác | 0,2% số cặp (customer, album) |
+| Album test: số track khách mua / kích thước album | 1,92 / 13,3 (tỉ lệ phủ trung bình 18%); 39,7% album test chỉ mua 1 track |
+| Null | `Composer` 978 (28%); `Genre`, `Album` không null |
+| Giá | 0,99 (95%) hoặc 1,99 (video/TV) |
 
 **Kết luận thiết kế**
-1. **Cấp Tổng gần như là hằng số** (~37,62 mỗi tháng, không có mùa vụ rõ: trung bình theo tháng trong năm chỉ dao động 37,25–40,22; tự tương quan lag 1 = 0,31, lag 12 = −0,12). Các đỉnh đến từ dòng giá 1,99. Baseline đơn giản rất mạnh; mô hình phức tạp khó thắng. Cần báo cáo điều này thay vì ép mô hình học máy "thắng".
-2. **Cấp Album là nơi có tín hiệu thật:** doanh thu album gắn chặt với số track và số người mua; 100% album bán năm 2013 đã có lịch sử trước đó. Chuỗi tháng quá thưa nên **dự báo theo cửa sổ 12 tháng**, không theo tháng.
-3. **Cấp Track gần như không có chuỗi thời gian:** mỗi track bán 1–2 lần trong 5 năm, 71% track bán năm 2013 chưa từng bán. Dự báo track = *phân bổ từ album* + xác suất bán × giá, không dựng mô hình chuỗi thời gian riêng cho từng track.
-4. Sai số tuyệt đối trung bình (MAE) **gây hiểu lầm** ở cấp Track: dự báo toàn 0 cho MAE tốt nhất (xem §7.3). Phải dùng RMSE, độ lệch Poisson/Tweedie, WAPE theo nhóm và chỉ số xếp hạng.
-5. Catalog không có ngày phát hành: coi mọi album/track có sẵn suốt 5 năm. Ghi nhận là hạn chế.
-6. Tháng 12/2013 chỉ có dữ liệu đến 22/12 nhưng doanh thu (38,62) vẫn ở mức bình thường; giữ nguyên và ghi chú trong báo cáo làm sạch.
+1. Ma trận customer×track thưa ~1% và gần như không chồng lấn → CF cấp track vô dụng, dùng content-based cho track. **Ma trận customer×album dày hơn nhiều** (khoảng 80% album có bán có 3–7 người mua) → CF cấp album dùng được.
+2. Chỉ có tín hiệu implicit nhị phân (đã mua = 1).
+3. Khách gần như không mua lại album đã mua (0,2%) → luôn loại album đã mua khỏi ứng viên; không chuyển sang gợi ý "mua nốt các track còn thiếu".
+4. Track toàn catalog gần như không dự đoán được (Recall@10 khoảng 1–2%); đơn vị gợi ý chính là **album**, track chỉ xếp **trong album đã chọn**, và chỉ cần đo ở đúng bối cảnh đó (§7.3).
+5. Chỉ 59 customer → mô hình nhẹ, chống overfit, báo cáo CI.
+
+Làm sạch trên dữ liệu này không loại dòng nào; báo cáo làm sạch ghi nhận điều đó.
 
 ---
 
@@ -74,30 +59,30 @@ Doanh thu = `UnitPrice × Quantity` của `InvoiceLine`. Tổng này trùng `Inv
 | ID | Yêu cầu |
 |---|---|
 | FR-01 | Đọc SQLite qua DAO; báo lỗi rõ nếu file sai hoặc thiếu bảng |
-| FR-02 | Làm sạch dữ liệu (§4), đối chiếu doanh thu dòng với `Invoice.Total`, ghi báo cáo làm sạch |
-| FR-03 | Dựng chuỗi tổng theo tháng (đủ 60 tháng, tháng trống = 0) và bảng doanh thu album/track theo cửa sổ 12 tháng tại từng origin |
-| FR-04 | Chia theo origin thời gian (§5.2), kiểm tra không rò rỉ bằng `assert` |
-| FR-05 | Huấn luyện F1–F6 (Tổng), A1–A5 (Album), K1–K4 (Track); chọn tham số trên validation |
-| FR-06 | Đánh giá trên test theo chỉ số từng cấp (§7.1), kèm CI 95% và so sánh cặp với baseline mạnh nhất |
-| FR-07 | Hòa giải phân cấp R1–R3 (§6.4); báo cáo độ lệch trước/sau hòa giải |
-| FR-08 | Sinh khoảng dự báo 80% (§7.1) cho cả ba cấp |
-| FR-09 | Chọn mô hình từng cấp và phương pháp hòa giải từ giao diện hoặc dòng lệnh; mặc định là mô hình thắng trên validation |
-| FR-10 | Đóng gói model (mô hình ba cấp, phân vị sai số, bảng album/track, chuỗi tháng) vào một file `.zip`; nạp lại để dự báo mà không train lại |
-| FR-11 | Xem lịch sử doanh thu (đồ thị + bảng) của tổng, từng album, từng track |
-| FR-12 | Dự báo tương lai: huấn luyện lại trên mọi origin có nhãn đầy đủ và dự báo 12 tháng sau ngày cuối của dữ liệu (2014) |
+| FR-02 | Làm sạch dữ liệu (§4) và ghi báo cáo làm sạch (số dòng trước/sau, số dòng bị loại) |
+| FR-03 | Tạo bảng tương tác customer–album và customer–track có thời gian mua |
+| FR-04 | Chia train/test 80/20 theo thời gian từng customer, kiểm tra không rò rỉ bằng `assert` |
+| FR-05 | Huấn luyện M1–M7 (album) và T0–T2 (track); chọn tham số trên validation |
+| FR-06 | Đánh giá album trên test: Recall@K, Precision@K, NDCG@K, MAP@K, HitRate@K, Coverage, Diversity, CI 95% |
+| FR-07 | Đánh giá track **trong album** (§7.3) |
+| FR-08 | Kiểm tra độ nhạy theo điểm cắt, nhiều seed, so sánh cặp (§7.1) |
+| FR-09 | Gợi ý Top-K album cho khách đã có (loại album đã mua), kèm lý do và track chưa mua xếp theo điểm |
+| FR-10 | Gợi ý cho khách mới theo độ phổ biến của quốc gia và/hoặc một hoặc nhiều thể loại |
+| FR-11 | Chọn mô hình album từ giao diện hoặc dòng lệnh; mặc định theo kết quả validation (§6.1) |
+| FR-12 | Đóng gói model (thống kê, ma trận CF, LambdaRank album, LambdaRank track, bảng album) vào một file `.zip`; nạp lại để gợi ý mà không train lại |
+| FR-13 | Xem lịch sử mua đầy đủ của khách đã có trong popup |
+| FR-14 | Tab **Kết quả mô hình** trong giao diện: đọc các CSV trong `artifacts/` và hiển thị bảng, biểu đồ so sánh có CI |
 
 ### 3.2 Phi chức năng
 
 | ID | Yêu cầu |
 |---|---|
 | NFR-01 | Tái lập: seed cố định (42), cấu hình trong `config.py` |
-| NFR-02 | **Không rò rỉ dữ liệu:** mọi feature tại origin `o` chỉ dùng giao dịch có `InvoiceDate ≤ o`; nhãn có cửa sổ `(o, o+12 tháng]` không được lọt vào lịch sử của bất kỳ dòng nào dùng để đánh giá; nhãn test không dùng để chọn tham số |
-| NFR-03 | Huấn luyện toàn bộ dưới 1 phút; dự báo một album/track dưới 1 giây |
-| NFR-04 | UI không treo khi nạp model và dự báo |
+| NFR-02 | **Không rò rỉ dữ liệu:** mọi thống kê (popularity, hồ sơ, feature, TF-IDF, ma trận CF) chỉ tính từ train/cửa sổ lịch sử tương ứng; nhãn test không dùng để chọn tham số (kể cả `k`, `shrink`, `lambda` của CF) |
+| NFR-03 | Huấn luyện chính dưới 1 phút; toàn bộ đánh giá phụ (độ nhạy điểm cắt, nhiều seed) dưới 5 phút; gợi ý một khách dưới 1 giây |
+| NFR-04 | UI không treo khi nạp model và gợi ý (chạy nền bằng `QThread`) |
 | NFR-05 | Code ML không phụ thuộc Qt (chạy được bằng `python -m ml.train`) |
 | NFR-06 | Chỉ nạp file model do chính dự án tạo ra (pickle có thể chạy code tùy ý) |
-| NFR-07 | **Nhất quán phân cấp:** sau hòa giải, `Σ track = album` và `Σ album = Tổng` (sai lệch tuyệt đối < 1e-6) |
-| NFR-08 | Dự báo không âm ở mọi cấp |
 
 ---
 
@@ -105,278 +90,287 @@ Doanh thu = `UnitPrice × Quantity` của `InvoiceLine`. Tổng này trùng `Inv
 
 | Bước | Việc làm |
 |---|---|
-| 1 | Join `InvoiceLine → Invoice`, `Track → Album → Artist`, `Track → Genre`, `Track → MediaType` |
-| 2 | Loại: dòng trùng `InvoiceLineId`, track không có trong catalog, `Quantity ≤ 0`, giá ≤ 0, ngày sai định dạng; ghi số dòng bị loại (dữ liệu này dự kiến không loại dòng nào) |
-| 3 | Chuẩn hóa `InvoiceDate` sang `datetime`; tính `Revenue = UnitPrice × Quantity` |
-| 4 | Đối chiếu `Σ Revenue` theo hóa đơn với `Invoice.Total`; ghi số hóa đơn lệch (đã đo: 0) |
-| 5 | Dựng chuỗi Tổng theo tháng `MS`, đủ 60 tháng, tháng không có bán = 0 |
-| 6 | Tạo bảng catalog album (`NTracks`, `TotalMs`, `MeanPrice`, `VideoShare`, thể loại chính, nghệ sĩ) và catalog track |
-| 7 | Với mỗi origin `o`, dựng bảng (album, o) và (track, o): feature từ lịch sử `≤ o` và nhãn `y` = doanh thu trong `(o, o+12 tháng]` (§5) |
+| 1 | Join `InvoiceLine → Invoice → Customer`, `Track → Album → Artist`, `Track → Genre` |
+| 2 | Loại: dòng trùng `InvoiceLineId`, track không có trong catalog, `Quantity ≤ 0`, giá ≤ 0, ngày sai định dạng; ghi số dòng bị loại |
+| 3 | Chuẩn hóa `InvoiceDate` sang `datetime`; strip tên artist và composer |
+| 4 | `Composer` rỗng → `"Unknown"` và cờ `ComposerMissing` |
+| 5 | Gộp thành tương tác customer–album: `NTracksBought`, `NTracksAlbum`, `Coverage`, `FirstPurchase`, `LastPurchase` |
+| 6 | Gộp thành tương tác customer–track (kèm album của track) |
+| 7 | Tạo bảng album (`NTracks`, `TotalMs`, `MeanPrice`, `ComposerMissingShare`, thể loại) |
 
-Kết quả: báo cáo làm sạch (bảng `report`) được ghi vào log khi huấn luyện.
+Kết quả: báo cáo làm sạch (bảng `report`) được ghi vào log và `artifacts/cleaning_report.csv`.
 
 ---
 
 ## 5. Bài toán, chia dữ liệu, feature
 
 ### 5.1 Bài toán
-- **Tổng:** dự báo chuỗi `R_t` (t = tháng) cho 12 tháng tiếp theo từ lịch sử đến origin.
-- **Album/Track:** với origin `o`, dự báo `y(e, o) = Σ doanh thu của e trong (o, o+12 tháng]` cho mọi `e` trong catalog (kể cả album/track chưa từng bán). Mục tiêu không âm, dạng *zero-inflated* (≈ 30% album và ≈ 87% track-origin có `y = 0`).
+Top-K recommendation với implicit feedback (đã mua = 1). Ứng viên là **toàn bộ album customer chưa mua trong train** (không lấy mẫu). Nhãn `y(u,a)=1` nếu u mua a trong giai đoạn đánh giá. Với track: ứng viên là các track của một album; nhãn `y=1` nếu customer mua track đó (§7.3).
 
-### 5.2 Chia theo origin thời gian (rolling-origin)
+### 5.2 Chia 80/20 theo thời gian, từng customer
+1. Sắp album của customer theo `FirstPurchase`.
+2. `n_train = round(0.8 × n)` album đầu → **train**; phần còn lại → **test**. Quy tắc này cho 1.041 dòng train và **260 dòng test** (trung bình 4,4 album/customer).
+3. Từ train, 80% đầu → **sub_a**, 20% cuối → **sub_b**; từ sub, 80% đầu → **sub**, 20% cuối → **validation**. Tách theo thời gian, không trộn ngẫu nhiên.
+4. Track đi theo album: track của một album thuộc đúng cửa sổ của album đó. Không có track test nào nằm trong lịch sử train của cùng customer.
 
-| Vai trò | Origin | Cửa sổ nhãn |
-|---|---|---|
-| Train (tuning) | 2009-12-31, 2010-06-30, 2010-12-31 | đến hết 2011-12-31 |
-| **Validation** | 2011-12-31 | 2012-01 → 2012-12 |
-| Train (cuối) | 2009-12-31, 2010-06-30, 2010-12-31, 2011-06-30, 2011-12-31 | đến hết 2012-12-31 |
-| **Test** | 2012-12-31 | 2013-01 → 2013-12 |
-| Sản xuất (FR-12) | thêm 2012-06-30, 2012-12-31 vào train; origin dự báo 2013-12-31 | 2014 |
-
-- Origin cách nhau 6 tháng, nhãn 12 tháng nên cửa sổ nhãn của các dòng train chồng lấn nhau. Chấp nhận được vì mọi nhãn train đều kết thúc **trước** origin của tập được đánh giá. Ghi nhận mức tự tương quan này khi đọc CI.
-- Số dòng: album 347 × 5 = 1.735; track 3.503 × 5 = 17.515.
-- Cấp Tổng: huấn luyện trên 48 tháng 2009-01→2012-12, kiểm tra trên 12 tháng 2013. Chọn tham số bằng backtest origin 2010-12-31 và 2011-12-31 (mỗi lần dự báo 12 tháng).
-- `assert` trong `data_prep.py`: (1) mọi feature của dòng (e, o) dùng ngày ≤ o; (2) ngày cuối của cửa sổ nhãn train ≤ origin của tập đánh giá; (3) không có nhãn test trong bảng train.
-
-### 5.3 Quy trình huấn luyện LightGBM (album và track dùng chung quy trình)
-- **Tuning:** huấn luyện trên 3 origin train (tuning), đánh giá trên validation (origin 2011-12-31). Lưới 4 cấu hình: `num_leaves` ∈ {3, 7}, `n_estimators` ∈ {100, 300}. Chọn theo RMSE trên validation.
-- **Huấn luyện cuối:** dùng 5 origin với tham số đã chọn.
-- **Mục tiêu học:** `objective = tweedie` (`tweedie_variance_power = 1.3`), phù hợp doanh thu không âm có nhiều số 0. Các tham số khác cố định (`learning_rate = 0.05`, `min_child_samples = 20`, `seed = 42`).
-- Không lấy mẫu âm (khác đề gợi ý): mọi album/track của catalog đều là một dòng, nhãn là doanh thu thật.
+### 5.3 Quy trình huấn luyện (album và track dùng chung)
+- **Tuning:** huấn luyện trên cửa sổ (sub_a → nhãn sub_b), đánh giá trên cửa sổ (sub → nhãn validation). Chọn theo NDCG@10 trên validation.
+  - LambdaRank (M5, T2): lưới 4 cấu hình (`num_leaves` ∈ {7, 15}, `n_estimators` ∈ {100, 300}).
+  - M6: `k` ∈ {20, 50, tất cả}, `shrink` ∈ {0, 1}. M7: `lambda` ∈ {50, 200, 1000}.
+- **Huấn luyện cuối:** dùng cả hai cửa sổ với tham số đã chọn.
+- **Mẫu:** mỗi (customer, cửa sổ) là một nhóm LambdaRank gồm **mọi album chưa mua** (khoảng 330 ứng viên), nhãn dương là album của giai đoạn sau. Không lấy mẫu âm.
+- **Ma trận/điểm CF** cho từng cửa sổ chỉ dựng từ lịch sử của cửa sổ đó.
 
 ### 5.4 Feature
 
-**Album (`FEATURE_COLUMNS`, 13 cột):**
-- Tĩnh theo catalog: `n_tracks`, `log_total_ms`, `mean_price`, `video_share`.
-- Lịch sử đến origin: `rev_all`, `rev_12`, `rev_6` (doanh thu toàn bộ / 12 tháng / 6 tháng gần nhất), `n_buyers`, `months_since_last_sale`, `rev_rate` (doanh thu quy năm = `rev_all / số tháng lịch sử × 12`), `sold_track_share` (tỉ lệ track của album đã bán ít nhất một lần).
-- Ngữ cảnh: `artist_other_rev` (doanh thu các album khác cùng nghệ sĩ), `genre_rev_share` (tỉ trọng doanh thu của thể loại chính).
+**Album (`FEATURE_COLUMNS`, 14 cột):**
+- Nội dung (cosine với hồ sơ customer): `genre_cos`, `artist_genre_cos`, `tfidf_cos`.
+- Phổ biến: `pop_global`, `pop_country`.
+- Nghệ sĩ: `artist_bought`, `artist_recency`.
+- Catalog: `n_tracks`, `log_total_ms`, `mean_price`, `composer_missing`.
+- Khách: `cust_n_albums`.
+- CF: `cf_knn` (điểm M6), `cf_ease` (điểm M7), cả hai chuẩn hóa theo thứ hạng trong customer.
 
-**Track (`TRACK_FEATURE_COLUMNS`, 12 cột):**
-- Tĩnh: `t_unit_price`, `t_log_ms`, `t_is_video`, `t_position_in_album`.
-- Lịch sử: `t_sold_before`, `t_buyers`, `t_months_since_sold`.
-- Từ album chứa track: `t_album_n_tracks`, `t_album_rev_12`, `t_album_sold_share`, `t_album_rev_rate`.
-- Ngữ cảnh: `t_genre_rev_share`.
+**Track (`TRACK_FEATURE_COLUMNS`, 13 cột):** `t_genre_cos`, `t_composer_cos`; `t_artist_bought`, `t_album_bought`; `t_album_content_cos`, `t_album_pop`; `t_track_pop`; `t_n_prior_buyers` (số customer khác đã mua track trong cửa sổ lịch sử), `t_album_unsold_share` (tỉ lệ track của album chưa ai mua); `t_unit_price`, `t_log_ms`, `t_composer_missing`; `t_cust_n_tracks`.
 
-**Tổng (cho F6):** `lag1`, `lag2`, `lag12`, `roll_mean_3`, `roll_mean_12`, `month`.
-
-Không dùng `InvoiceId`, `CustomerId` làm feature, không dùng bất kỳ thống kê nào của giai đoạn nhãn.
+Hồ sơ customer chỉ được tính từ cửa sổ lịch sử tương ứng. Không dùng `Invoice.Total`, `InvoiceId`, hay thống kê nào của giai đoạn nhãn.
 
 ---
 
 ## 6. Mô hình
 
-### 6.1 Tổng (chuỗi tháng, h = 1…12)
+### 6.1 Album
 
-| # | Mô hình | Cách tính |
+| # | Mô hình | Cách tính điểm |
 |---|---|---|
-| F1 | Mean | Trung bình toàn bộ tháng train |
-| F2 | Median | Trung vị toàn bộ tháng train. **Dự kiến là baseline mạnh nhất** vì 72% tháng đúng bằng 37,62 |
-| F3 | Naive | Giá trị tháng cuối |
-| F4 | Seasonal naive | Giá trị cùng tháng năm trước |
-| F5 | ETS (Holt-Winters) | `statsmodels`, thử cấu hình có/không mùa vụ, damped trend; chọn theo validation |
-| F6 | LightGBM trên lag | Dự báo đệ quy từng bước với feature §5.4; nhỏ (`num_leaves ≤ 7`) |
+| M1 | Popularity | Số customer trong train đã mua album |
+| M2 | Genre-profile | Cosine giữa thể loại album và hồ sơ thể loại customer; **tie-break theo M1** |
+| M3 | Artist+Genre profile | Cosine giữa vector (nghệ sĩ + thể loại) và hồ sơ customer |
+| M4 | Content TF-IDF | Cosine TF-IDF (nghệ sĩ, nhạc sĩ, thể loại) với hồ sơ customer |
+| M5 | **Hybrid LightGBM (LambdaRank)** | Chấm điểm 14 feature (gồm điểm M2–M4, M6, M7) |
+| M6 | **Item-kNN (CF)** | `score(u,a) = Σ_{b ∈ hồ sơ u} sim(a,b)`, `sim` = cosine giữa hai cột album của ma trận customer×album, giữ `k` láng giềng gần nhất, có `shrink` |
+| M7 | **EASE (CF)** | Mô hình tuyến tính đóng: `B = −P / diag(P)`, `P = (RᵀR + λI)⁻¹`, `diag(B)=0`, `score = R·B` |
 
-Mô hình mặc định cấp Tổng = mô hình có RMSE validation thấp nhất. Nếu khác biệt giữa các mô hình nằm trong sai số, chọn mô hình đơn giản hơn.
+**Mô hình mặc định:** mô hình có NDCG@10 validation cao nhất giữa M5, M6, M7. Dự kiến M5 hoặc M6 (§7.2). Baseline mạnh nhất để so sánh cặp là M6 nếu M5 là mô hình mặc định, và M3 là mốc nội dung.
 
-### 6.2 Album (cửa sổ 12 tháng)
+### 6.2 Track
 
-| # | Mô hình | Cách tính |
+| # | Mô hình | Cách tính điểm |
 |---|---|---|
-| A1 | Global mean | Doanh thu trung bình một album trong cửa sổ train, giống nhau cho mọi album |
-| A2 | Own-rate | `rev_rate` của chính album (doanh thu quy năm) |
-| A3 | Size-proportional | `ŷ = k × n_tracks`, `k = Σy / Σn_tracks` trên train. **Baseline mạnh nhất dự kiến** |
-| A4 | Poisson GLM | `PoissonRegressor` trên `log1p(feature)`, `alpha = 1` |
-| A5 | **Hybrid LightGBM (Tweedie)** | 13 feature §5.4. **Mô hình mặc định** |
+| T0 | Random | Xếp ngẫu nhiên trong album (seed cố định); mốc tham chiếu |
+| T1 | Track popularity | Số customer trong train đã mua track |
+| T2 | **Track LightGBM (LambdaRank)** | 13 feature track (§5.4); nhóm = (customer, album đã mua trong giai đoạn nhãn), ứng viên = mọi track của album. Dùng trong giao diện để xếp track của album |
 
-### 6.3 Track (cửa sổ 12 tháng)
-
-| # | Mô hình | Cách tính |
-|---|---|---|
-| K1 | Zero | `ŷ = 0` (mốc tham chiếu cho các chỉ số, không dùng để dự báo) |
-| K2 | Uniform allocation | `ŷ = ŷ_album / n_tracks` |
-| K3 | Unsold allocation | Chia `ŷ_album` đều cho các track chưa từng bán, track đã bán nhận 0 |
-| K4 | **Track LightGBM (Tweedie)** | 12 feature track §5.4. **Mô hình mặc định** |
-
-K3 cố tình bỏ qua track đã bán, trong khi 29% doanh thu track 2013 đến từ track đã bán trước đó; K4 cần học được phần này.
-
-### 6.4 Hòa giải phân cấp
-
-| # | Phương pháp | Cách làm |
-|---|---|---|
-| R1 | Bottom-up | `album = Σ track`, `Tổng = Σ album` |
-| R2 | **Top-down tỉ lệ (mặc định dự kiến)** | Giữ tổng 12 tháng từ mô hình Tổng tốt nhất; album = Tổng × `ŷ_album / Σ ŷ_album`; track = album × `ŷ_track / Σ ŷ_track` trong album. Hình dạng theo tháng lấy từ mô hình Tổng |
-| R3 | Middle-out | Giữ `ŷ_album` (A5); track chia lại theo tỉ trọng K4 sao cho `Σ track = album`; `Tổng = Σ album` |
-
-Lý do dự kiến chọn R2: cấp Tổng gần như hằng số nên tổng từ mô hình Tổng ít sai nhất, còn tổng các album dự báo thô lệch (thử nghiệm sơ bộ ở §7.2: ≈ 480–499 so với thực tế 450,6). Phương pháp mặc định cuối cùng chọn theo sai số 12 tháng của cấp Tổng và RMSE album trên validation.
+Khi chọn album bằng mô hình nào, track vẫn dùng T2. Khách mới không có hồ sơ nên track xếp theo T2 với feature hồ sơ bằng 0 (nếu chưa tốt hơn T0 thì dùng `t_n_prior_buyers` tăng dần).
 
 ---
 
 ## 7. Đánh giá
 
 ### 7.1 Cách đo
+- **Test chính:** chia 80/20 theo §5.2 (59 customer, 260 album test). Ứng viên là album chưa có trong train.
+- Chỉ số chính: NDCG@10, Recall@10. Phụ: Precision, MAP, HitRate ở K ∈ {5, 10, 20}; Coverage@K; Diversity@K (1 − cosine thể loại trung bình trong danh sách).
+- **CI 95%** bằng bootstrap theo customer (1.000 lần). So sánh cặp theo từng customer với M3 và với mô hình mặc định.
+- **Nhiều seed (M5, 5 seed):** báo cáo khoảng và trung bình NDCG@10. M6, M7 xác định nên không cần seed.
+- **Độ nhạy theo điểm cắt (báo cáo phụ, không dùng chọn mô hình):** lặp lại huấn luyện và đánh giá với tỉ lệ train ∈ {70%, 75%, 80%, 85%, 90%}, giữ nguyên tham số đã chọn ở 80/20. Mục đích: xem thứ hạng mô hình có ổn định không. Các test set chồng lấn nhau nên không coi là độc lập.
+- Mọi tham số (kể cả `k`, `shrink`, `lambda`) chỉ chọn trên validation, không chọn trên test.
 
-| Cấp | Chỉ số chính | Chỉ số phụ |
-|---|---|---|
-| Tổng | MAE, RMSE theo tháng | MAPE, MASE (thang = MAE naive trong train), sai số % của tổng 12 tháng; backtest 3 origin (2010-12, 2011-12 dùng cho chọn mô hình; 2012-12 là test) |
-| Album | RMSE | MAE, WAPE (`Σ|e| / Σy`), độ lệch Tweedie, **bias** (`Σŷ / Σy − 1`), Spearman, NDCG@10/20 xếp theo doanh thu thực |
-| Track | RMSE, độ lệch Poisson | WAPE tính trên nhóm (gộp theo album), bias, hit@K (K = 100, 500: số track trong top-K thực sự có bán) so với ngẫu nhiên (12,6%) |
+### 7.2 Kết quả
 
-- **Không dùng MAE làm chỉ số chính ở cấp Track** (xem §7.3).
-- CI 95% bằng bootstrap theo album (1.000 lần; track lấy mẫu theo album chứa nó vì track cùng album tương quan). Cấp Tổng chỉ có 12 điểm test nên không bootstrap, thay bằng backtest nhiều origin.
-- So sánh cặp với baseline mạnh nhất (A3 cho album) theo từng album: chênh lệch bình phương sai số trung bình và CI.
-- **Khoảng dự báo 80%:** phân vị 10% và 90% của sai số trên validation (split conformal, tính riêng từng cấp; cận dưới cắt ở 0). Báo cáo độ phủ thực tế trên test.
+**Lần chạy đầu (chưa có feature CF, K = 10)**
 
-### 7.2 Kết quả sơ bộ (khảo sát khả thi, chưa phải kết quả chính thức)
-
-Đã chạy thử một lần trên dữ liệu thật để kiểm tra bài toán có tín hiệu hay không, dùng `HistGradientBoostingRegressor(loss='poisson')` của scikit-learn thay LightGBM. **Lần thử này có chạy cả trên cửa sổ test**, nên các số test bên dưới chỉ để đặt kỳ vọng. Kết quả chính thức sẽ chạy lại bằng pipeline đầy đủ, tham số chọn chỉ dựa trên validation.
-
-**Album — RMSE (mô hình huấn luyện đến origin tương ứng)**
-
-| Mô hình | RMSE validation (2012) | RMSE test (2013) |
-|---|---|---|
-| Dự báo 0 | 2,410 | 2,059 |
-| A1 Global mean | 1,978 | 1,598 |
-| A2 Own-rate | 1,941 | 1,600 |
-| A3 Size-proportional | 1,723 | 1,292 |
-| A4 Poisson GLM | 1,716 | 1,309 |
-| A5 (bản thử, `num_leaves` 3 / 7) | 1,383 / 1,343 | 1,072 / 1,055 |
-
-Tổng doanh thu album thực tế 2012 = 477,5 và 2013 = 450,6; tổng dự báo của A5 bản thử lần lượt 474–489 và 480–499, tức lệch dương khoảng 6–11% ở năm test. Đây là lý do cần bước hòa giải R2.
-
-**Tổng — MAE tháng trên 2013 (bản thử, huấn luyện đến 2012-12)**
-
-| Mô hình | MAE |
-|---|---|
-| F2 Median | 2,24 |
-| F3 Naive | 2,24 |
-| F1 Mean | 3,33 |
-| F4 Seasonal naive | 4,41 |
-
-Doanh thu thực tế 2013 = 450,58; Mean × 12 = 469,50 (lệch +4,2%). Median/Naive thắng vì doanh thu hằng số 37,62; seasonal naive thua vì sao chép luôn các đỉnh ngẫu nhiên của năm trước.
-
-**Track (test 2013, album dùng A5 bản thử, tham chiếu cho K1–K3)**
-
-| Mô hình | MAE | RMSE | Tổng dự báo (thực 450,6) |
+| Mô hình | Recall@10 | NDCG@10 | HitRate@10 |
 |---|---|---|---|
-| K1 Zero | 0,129 | 0,367 | 0 |
-| K2 Uniform | 0,228 | 0,339 | 499,3 |
-| K3 Unsold allocation | 0,206 | 0,351 | 490,8 |
+| M1 Popularity | 0,047 | 0,031 | 0,169 |
+| M2 Genre-profile (chưa tie-break) | 0,000 | 0,000 | 0,000 |
+| M3 Artist+Genre | 0,074 | 0,052 | 0,153 |
+| M4 Content TF-IDF | 0,073 | 0,051 | 0,203 |
+| M5 Hybrid LightGBM (không CF, lấy mẫu âm 30:1) | 0,100 | 0,085 | 0,322 |
 
-Hit@100 của K3 = 33 và hit@500 = 132, so với ngẫu nhiên kỳ vọng ≈ 12,6 và ≈ 63. Spearman giữa dự báo và doanh thu thực, gộp theo album, = 0,875 (với K2).
+So sánh cặp M5 với M3 (NDCG@10): +0,033, CI 95% [−0,013; 0,080], thắng 14 / thua 7: chưa thể kết luận M5 vượt M3. NDCG@10 của M5 qua 5 seed dao động 0,082–0,109 (trung bình ~0,091).
 
-### 7.3 Cách diễn giải dự kiến
-- **Album:** có tín hiệu rõ so với mọi baseline, nhưng chưa có CI; tiêu chí đạt ở §7.4.
-- **Tổng:** kỳ vọng F2/F3 thắng hoặc ngang các mô hình khác. Ghi nhận đúng như vậy.
-- **Track:** K1 (toàn 0) có MAE tốt nhất vì 87% track-origin có nhãn 0, trong khi K2/K3 có RMSE tốt hơn K1 và xếp hạng tốt hơn ngẫu nhiên. Vì vậy dùng RMSE, độ lệch Poisson, WAPE theo nhóm và hit@K thay cho MAE. Mức độ chính xác ở cấp từng track thấp là kết luận chấp nhận được; giá trị chính nằm ở tổng theo album và xếp hạng.
+**Khảo sát CF (sơ bộ, chưa phải kết quả chính thức)**
+
+Chạy một lần trên đúng cách chia 80/20 (1.041 train / 260 test) bằng `numpy` thuần. **Lần thử này có xem kết quả trên test và thử một lưới nhỏ tham số**, nên các số dưới đây chỉ để đặt kỳ vọng; kết quả chính thức chạy bằng pipeline đầy đủ với tham số chọn trên validation. Bản thử tái hiện M1 và M3 gần với lần chạy đầu nhưng không trùng hoàn toàn (khác chi tiết tie-break và cách dựng hồ sơ).
+
+| Mô hình (bản thử) | Recall@10 | NDCG@10 | HitRate@10 |
+|---|---|---|---|
+| M1 Popularity | 0,039 | 0,027 | 0,136 |
+| M3 Artist+Genre | 0,067 | 0,050 | 0,153 |
+| M6 Item-kNN (6 cấu hình `k`, `shrink`) | 0,138–0,158 | 0,122–0,129 | 0,407–0,475 |
+| M7 EASE (`lambda` 50 / 200 / 1000) | 0,135–0,138 | 0,115–0,119 | 0,424 |
+| User-kNN (tham khảo) | 0,135 | 0,111 | 0,424 |
+| Trung bình hạng M3 + M6 (tham khảo) | 0,122 | 0,093 | 0,356 |
+
+Nhận xét: CF cấp album cao hơn rõ rệt các baseline nội dung và cao hơn M5 ở lần chạy đầu, và ít nhạy với tham số (NDCG@10 trong khoảng 0,115–0,129 ở mọi cấu hình đã thử). Trộn hạng với M3 làm giảm điểm, nên M5 phải được kiểm chứng trên validation chứ không mặc định tốt hơn M6.
+
+### 7.3 Đánh giá track trong album
+- **Đơn vị:** mỗi cặp (customer, album) mà customer mua trong giai đoạn test. Ứng viên = mọi track của album; nhãn = track được mua. Chỉ xét album có ≥ 6 track để top-5 có ý nghĩa.
+- **Chỉ số:** HitRate@3, NDCG@5; CI 95% bootstrap theo customer. So với T0 (ngẫu nhiên).
+- Chỉ số toàn catalog (Recall@10 khi xếp mọi track chưa mua) giữ làm **chỉ số phụ**. Lần chạy đầu: T1 Recall@10 0,000; T2 (chưa có feature `t_n_prior_buyers`) Recall@10 0,016, NDCG@10 0,015, HitRate@10 0,102.
+
+**Khảo sát sơ bộ (267 cặp, chưa phải kết quả chính thức; số đo trên test, xem như giả thuyết cần kiểm chứng)**
+
+| Cách xếp track trong album | HitRate@3 | NDCG@5 |
+|---|---|---|
+| T0 Ngẫu nhiên | 0,434 | 0,276 |
+| T1 Nhiều người mua trước xếp trên | 0,221 | 0,176 |
+| **Ít người mua trước xếp trên** | **0,554** | **0,400** |
+| Track ngắn xếp trên | 0,363 | 0,260 |
+
+T1 (popularity) kém hơn ngẫu nhiên, còn xếp ngược theo độ phổ biến thì tốt hơn rõ. Giả thuyết: mỗi track hiếm khi bị bán lặp (tối đa 2 người mua trên toàn dữ liệu) nên track chưa có ai mua dễ được mua hơn. Đây có thể là lý do T1 và T2 lần chạy đầu cho điểm thấp. T2 có thêm `t_n_prior_buyers` và `t_album_unsold_share` để học được quan hệ này; kết quả phải được xác nhận bằng validation, và bước phân tích lỗi cần kiểm tra xem hiệu ứng có do cách sinh dữ liệu hay không. Mẫu nhỏ (267 cặp), CI sẽ rộng.
 
 ### 7.4 Tiêu chí đạt
-1. **Album:** A5 có RMSE test thấp hơn A3 (baseline mạnh nhất) và CI 95% của chênh lệch cặp không chứa 0. Nếu CI chứa 0, ghi nhận là chưa kết luận được, không tuyên bố vượt trội.
-2. **Tổng:** mô hình được chọn không tệ hơn F2 về MAE test; nếu không có mô hình nào tốt hơn F2, mô hình mặc định là F2 và ghi rõ lý do.
-3. **Track:** K4 hoặc K2 có RMSE thấp hơn K1 và hit@500 cao hơn ngẫu nhiên.
-4. **Hòa giải:** NFR-07 đạt (sai lệch < 1e-6) và bias của tổng 12 tháng trên test giảm so với R1.
-5. **Khoảng dự báo 80%:** độ phủ test báo cáo cùng giá trị danh định; chấp nhận độ phủ 65–95% do dữ liệu nhỏ.
+1. Mô hình album mặc định có NDCG@10 test cao hơn M1 và M3, và **CI 95% của chênh lệch cặp với M3 không chứa 0**. Nếu M5 và M6 không khác nhau có ý nghĩa thống kê, ghi nhận đúng như vậy và chọn mô hình đơn giản hơn (M6) làm mặc định.
+2. Thứ hạng M5/M6/M3/M1 không đảo trong phần lớn các điểm cắt 70–90%.
+3. T2 có NDCG@5 trong album cao hơn T0 với CI 95% của chênh lệch cặp không chứa 0; nếu không đạt, ghi nhận là chưa kết luận được.
 
 ### 7.5 Phân tích lỗi
-Dự kiến thực hiện: sai số album theo thể loại, theo số track, theo việc album đã bán hay chưa bán trước origin; sai số tổng theo các tháng có dòng giá 1,99. Chưa thực hiện trong phiên bản này.
+Nội dung: theo thể loại, theo số giao dịch của customer, theo quốc gia; thiên lệch về album phổ biến (Coverage, tỉ lệ album gợi ý nằm trong top-20 phổ biến); kiểm tra giả thuyết "ít người mua trước" ở §7.3.
 
 ---
 
 ## 8. Cấu trúc dự án
 
 ```
-BaitapChinook_Forecast/
+BaitapChinook/
 ├─ databases/
 │  └─ Chinook_Sqlite.sqlite
 ├─ connectors/
-│  └─ connector.py             # kết nối SQLite dùng chung (ensureConnection / close)
-├─ models/                     # lớp dữ liệu thuần (dataclass) + model đã đóng gói
-│  ├─ album.py                 # Album, Track
-│  ├─ forecast.py              # Forecast (điểm, cận dưới, cận trên, lịch sử)
-│  └─ forecaster.zip           # tạo bởi ml.train
-├─ dal/                        # truy cập dữ liệu, nơi duy nhất viết SQL
-│  ├─ RevenueDAO.py            # dòng doanh thu, chuỗi tháng, tổng theo album/track
-│  └─ CatalogDAO.py            # catalog album, track, nghệ sĩ, thể loại
-├─ ml/                         # học máy, không phụ thuộc Qt
-│  ├─ data_prep.py             # làm sạch, dựng chuỗi, origin, kiểm tra rò rỉ
-│  ├─ features.py              # FEATURE_COLUMNS, TRACK_FEATURE_COLUMNS, TOTAL_FEATURE_COLUMNS
-│  ├─ forecasters.py           # F1–F6, A1–A5, K1–K4, huấn luyện LightGBM
-│  ├─ reconcile.py             # R1–R3, kiểm tra nhất quán
-│  ├─ evaluate.py              # metric, bootstrap CI, so sánh cặp, conformal
-│  ├─ train.py                 # HUẤN LUYỆN
-│  ├─ predict.py               # SUY LUẬN (Predictor), dòng lệnh
-│  └─ package.py               # save_package / load_package
+│  └─ connector.py          # kết nối SQLite dùng chung (ensureConnection / close)
+├─ models/                  # lớp dữ liệu thuần (dataclass) + model đã đóng gói
+│  ├─ customer.py           # Customer
+│  ├─ album.py              # Album, Track
+│  ├─ recommendation.py     # Recommendation (album, điểm, lý do, [(Track, điểm)])
+│  └─ recommender.zip       # tạo bởi ml.train
+├─ dal/                     # truy cập dữ liệu, nơi duy nhất viết SQL
+│  ├─ CustomerDAO.py        # danh sách khách, quốc gia, lịch sử mua
+│  └─ AlbumDAO.py           # catalog, dòng mua, track theo album, album/track đã mua
+├─ ml/                      # học máy, không phụ thuộc Qt
+│  ├─ data_prep.py          # làm sạch, tương tác, chia 80/20, cửa sổ, kiểm tra rò rỉ
+│  ├─ features.py           # ProfileState, FEATURE_COLUMNS, TRACK_FEATURE_COLUMNS
+│  ├─ recommenders.py       # M1–M7 (gồm CF), T0–T2, huấn luyện LambdaRank, MODEL_REGISTRY
+│  ├─ evaluate.py           # metric, bootstrap CI, so sánh cặp, đánh giá track trong album, độ nhạy
+│  ├─ train.py              # HUẤN LUYỆN
+│  ├─ predict.py            # SUY LUẬN (Predictor), dòng lệnh
+│  └─ package.py            # save_package / load_package
 ├─ ui/
-│  ├─ ForecastMainWindow.ui    # thiết kế (Qt Designer)
-│  ├─ ForecastMainWindow.py    # sinh bằng pyside6-uic, không sửa tay
-│  ├─ ForecastMainWindowEx.py  # logic sự kiện, kế thừa Ui_MainWindow
-│  ├─ widgets.py               # widget dùng chung (ô tìm kiếm có gợi ý)
-│  └─ utils.py                 # showDataIntoTableWidget, drawForecastChart
+│  ├─ RecommendMainWindow.ui     # thiết kế (Qt Designer)
+│  ├─ RecommendMainWindow.py     # sinh bằng pyuic6, không sửa tay
+│  ├─ RecommendMainWindowEx.py   # logic sự kiện, kế thừa Ui_MainWindow
+│  ├─ HistoryDialog.py           # popup lịch sử mua
+│  ├─ widgets.py                 # CheckComboBox (ô xổ xuống chọn nhiều)
+│  └─ utils.py                   # showDataIntoTableWidget, drawGenreChart, relativeBars, Worker (QThread)
 ├─ test/
-│  └─ run_app.py               # mở ứng dụng (xem §8.2)
-├─ artifacts/                  # metrics_total.csv, metrics_album.csv, metrics_track.csv, paired_vs_a3.csv, tuning, coherence.csv
-├─ config.py                   # đường dẫn, seed, origin, horizon, lưới tham số
-├─ main.py                     # chạy ứng dụng
+│  └─ run_app.py            # mở ứng dụng (xem §8.2)
+├─ artifacts/               # metrics_album.csv, metrics_track_in_album.csv, paired.csv, seeds.csv, sensitivity_cut.csv, tuning.csv, cleaning_report.csv
+├─ config.py                # đường dẫn, seed, tỉ lệ chia, lưới K, lưới tham số
+├─ main.py                  # chạy ứng dụng
 └─ requirements.txt
 ```
 
 ### 8.1 Quy tắc lập trình
 
 **A. Học máy**
-1. Khám phá dữ liệu trước khi huấn luyện: đếm dòng, giá trị thiếu, đối chiếu doanh thu (ghi vào báo cáo làm sạch).
-2. Feature khai báo tường minh (`FEATURE_COLUMNS`, `TRACK_FEATURE_COLUMNS`, `TOTAL_FEATURE_COLUMNS`). Cột văn bản được mã hóa trước khi đưa vào mô hình số.
-3. **Chuỗi thời gian: không chia ngẫu nhiên, không xáo trộn.** Chia theo origin (§5.2); seed cố định.
-4. Chỉ đánh giá trên test. Validation chỉ dùng để chọn tham số/mô hình/phương pháp hòa giải; nhãn validation không dùng để huấn luyện cửa sổ đang đánh giá.
-5. Luôn so sánh với baseline đơn giản (F1–F4, A1–A3, K1–K2). Báo cáo chỉ số kèm CI hoặc backtest nhiều origin, không chỉ in dự báo.
-6. Model lưu kèm tên feature. Khi suy luận kiểm tra tên và thứ tự feature khớp với code; sai thì báo lỗi rõ.
+1. Khám phá dữ liệu trước khi huấn luyện: đếm dòng, giá trị thiếu, kiểu dữ liệu (ghi vào báo cáo làm sạch).
+2. Feature khai báo tường minh (`FEATURE_COLUMNS`, `TRACK_FEATURE_COLUMNS`). Cột văn bản được mã hóa (TF-IDF, one-hot, đếm) trước khi đưa vào mô hình số.
+3. Chia train/test trước khi fit; seed cố định.
+4. Chỉ đánh giá trên test. Validation chỉ dùng để chọn tham số (gồm tham số CF), và nhãn validation không được dùng để huấn luyện cửa sổ đang đánh giá. Kết quả ở điểm cắt khác 80% chỉ để báo cáo độ nhạy.
+5. Báo cáo chỉ số kèm CI, không chỉ in danh sách gợi ý.
+6. Model lưu kèm tên feature. Khi suy luận, kiểm tra tên và thứ tự feature khớp với code; sai thì báo lỗi rõ.
 7. Huấn luyện (`ml/train.py`) và suy luận (`ml/predict.py`) tách riêng. Suy luận chỉ nạp model đã đóng gói.
 8. Đường dẫn tính bằng `Path(__file__)` trong `config.py`.
 9. Model đóng gói dạng `.zip` chứa `meta.json` (đọc được) và `model.pkl` (pickle). Chỉ nạp file do dự án tạo ra (NFR-06).
 10. Dùng `logging`, không dùng `print`, cho tiến trình huấn luyện và kết quả.
 11. Chuỗi giao diện và thông báo hoàn toàn tiếng Việt; tên biến, hàm, class tiếng Anh; comment tiếng Việt có dấu.
-12. Dự báo luôn kẹp `max(0, ·)`; hòa giải chạy sau cùng và có `assert` nhất quán.
+12. Mọi mô hình album/track cài chung giao diện `fit(history)` và `score(customer, candidates)`, đăng ký trong `MODEL_REGISTRY` (`ml/recommenders.py`).
 
-**B. Giao diện**
-1. Tách thiết kế và logic: `.ui` (Qt Designer) → `.py` (sinh bằng `pyside6-uic`, không sửa tay) → `*Ex.py` (logic).
+**B. Giao diện (PyQt6)**
+1. Tách thiết kế và logic: `.ui` (Qt Designer) → `.py` (sinh bằng `pyuic6`, không sửa tay) → `*Ex.py` (logic).
 2. Thứ tự khởi tạo: `__init__` → `setupUi()` → `setupTables()` → `setupSignalAndSlot()` → `setupChart()` → `loadModel()` → `loadFilters()` → `showWindow()`.
 3. Lỗi hiển thị bằng `QMessageBox` (critical cho lỗi hệ thống/model, warning cho nhập sai). Mọi handler bọc `try/except`.
-4. Kiểm tra đầu vào trước khi xử lý (chưa chọn album/track).
+4. Kiểm tra đầu vào trước khi xử lý (chưa chọn khách, chưa chọn quốc gia hoặc thể loại cho khách mới).
 5. Logic dữ liệu nằm ở DAO và `ml/`, UI chỉ gọi và hiển thị.
 6. Bảng dùng chung `showDataIntoTableWidget(table, df)`.
 7. SQL luôn dùng placeholder `?`.
-8. Biểu đồ nhúng bằng `FigureCanvasQTAgg`; mỗi lần vẽ: `clear()` → vẽ → `tight_layout()` → `draw()`.
-9. Hiển thị tiền với 2 chữ số thập phân và đơn vị; luôn kèm khoảng dự báo 80% bên cạnh điểm dự báo, vì doanh thu từng album/track rất nhiễu.
+8. Biểu đồ nhúng bằng `matplotlib.backends.backend_qtagg.FigureCanvasQTAgg`; mỗi lần vẽ: `clear()` → vẽ → `tight_layout()` → `draw()`.
+9. Tác vụ nặng (nạp model, gợi ý) chạy trong `QThread` với lớp `Worker` (`ui/utils.py`) và `pyqtSignal`; UI chỉ cập nhật trong slot nhận kết quả.
+10. Mức phù hợp hiển thị theo `relativeBars` dạng thanh chấm + %: tương đối trong danh sách (100% cao nhất, 0% thấp nhất). Không hiển thị điểm thô vì thang điểm của mô hình không cố định.
+11. Dùng enum đầy đủ của PyQt6 (ví dụ `Qt.AlignmentFlag.AlignCenter`, `QMessageBox.StandardButton.Ok`); gọi `app.exec()`; không cài đồng thời PyQt6 và PySide6 trong cùng môi trường.
 
 **C. Kiểm tra**
 1. Thư mục `test/` chỉ chứa file khởi chạy giao diện, không có unit test.
-2. Chống rò rỉ và nhất quán phân cấp được kiểm tra bằng `assert` trong `ml/data_prep.py` và `ml/reconcile.py`.
+2. Chống rò rỉ được kiểm tra bằng `assert` trong `ml/data_prep.py` (không album test nào nằm trong train của cùng customer; mọi customer test có lịch sử train; ma trận CF của mỗi cửa sổ không chứa tương tác sau cửa sổ đó).
 
 ---
 
 ## 8.2 Thư mục `test/`
 
-`test/run_app.py` mở ứng dụng để xem giao diện và thử dự báo, không cần chuẩn bị thêm. File có đoạn thêm thư mục gốc vào `sys.path`, nên chạy từ đâu cũng được.
+`test/run_app.py` mở ứng dụng để xem giao diện và thử gợi ý, không cần chuẩn bị thêm. File có đoạn thêm thư mục gốc vào `sys.path`, nên chạy từ đâu cũng được.
 
-Trước khi nộp, kiểm tra trong môi trường ảo mới: chỉ cài `requirements.txt`, chạy `python -m ml.train` để tạo model, rồi mở `test/run_app.py`; giao diện phải hiện và dự báo được cả ba cấp.
+Trước khi nộp, kiểm tra trong môi trường ảo mới: chỉ cài `requirements.txt`, chạy `python -m ml.train` để tạo model, rồi mở `test/run_app.py`; giao diện phải hiện và gợi ý được cho khách đã có và khách mới.
 
 ---
 
-## 9. Giao diện
+## 9. Giao diện (PyQt6)
 
-Một màn hình `ForecastMainWindow`, gồm:
+Một cửa sổ `RecommendMainWindow` gồm hai tab chính: **Gợi ý** và **Kết quả mô hình**.
 
-| Khu vực | Nội dung |
+### 9.1 Tab Gợi ý
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ Mô hình: [M5 Hybrid ▾]   Số album (K): [10 ▲▼]   [ Gợi ý ]        ● Model đã nạp │
+├──────────────────────┬────────────────────────────────────────┬───────────────┤
+│ [Khách đã có|Khách mới]│  TOP-K ALBUM                           │ HỒ SƠ KHÁCH   │
+│ 🔍 Tìm theo tên/mã   │ # Album        Nghệ sĩ   Thể loại  Mức PH │ Tên, quốc gia │
+│ ┌──────────────────┐ │ 1 Album A      Artist 1  Rock    ████ 100% │ 22 album đã mua│
+│ │ 12  Nguyen Van A │ │ 2 Album B      Artist 2  Latin   ███░  82% │ Gu: Rock 41%… │
+│ │ 15  John Smith   │ │ 3 …                                       │ ───────────── │
+│ │ …                │ │───────────────────────────────────────────│ THỂ LOẠI ĐÃ MUA│
+│ └──────────────────┘ │ VÌ SAO GỢI Ý ALBUM ĐANG CHỌN              │ (biểu đồ cột) │
+│ (Khách mới: quốc gia │ • Giống với album X, Y bạn đã mua         │               │
+│  + thể loại nhiều    │ • Thể loại Rock chiếm 41% lịch sử         │ [ Xem lịch sử │
+│  lựa chọn)           │───────────────────────────────────────────│   mua (N) ]   │
+│                      │ TRACK CHƯA MUA CỦA ALBUM                  │               │
+│                      │ Track      Thể loại  Giá  Số người đã mua │               │
+│                      │ …                                Mức PH   │               │
+├──────────────────────┴────────────────────────────────────────┴───────────────┤
+│ Trạng thái: Đã gợi ý 10 album · Mức phù hợp là tương đối trong danh sách        │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Khu vực | Thành phần Qt | Nội dung |
+|---|---|---|
+| Thanh điều khiển | `QToolBar` hoặc `QHBoxLayout`: `QComboBox`, `QSpinBox`, `QPushButton` | Chọn mô hình (M1–M7, mặc định theo §6.1), K, nút Gợi ý (phím tắt Enter), chấm trạng thái model |
+| Cột trái | `QTabWidget` | Tab **Khách đã có:** `QComboBox` cho phép gõ tìm (`QCompleter`, theo tên hoặc mã). Tab **Khách mới:** `QComboBox` quốc gia (có thể để trống), `CheckComboBox` thể loại, nút "Chọn tất cả" và "Xóa hết" |
+| Bảng giữa trên | `QTableWidget` | Top-K album: #, album, nghệ sĩ, thể loại, mức phù hợp (thanh + %). Bấm một dòng để cập nhật hai khung bên dưới |
+| Khung **Vì sao gợi ý** | `QTextBrowser` hoặc `QListWidget` | Lý do của album đang chọn. M6/M7: nêu 2–3 album đã mua giống nhất. M5: 2–3 feature đóng góp lớn nhất (`predict(..., pred_contrib=True)` của LightGBM). Khách mới: độ phổ biến theo quốc gia/thể loại |
+| Bảng giữa dưới | `QTableWidget` | Track chưa mua của album đang chọn: track, thể loại, nhạc sĩ, thời lượng, giá, **số người đã mua trước**, mức phù hợp (T2) |
+| Cột phải | `QGroupBox` + `FigureCanvasQTAgg` + `QPushButton` | Thẻ hồ sơ khách (quốc gia, số album, thể loại nổi bật); biểu đồ cột thể loại đã mua; nút **Xem lịch sử mua (N dòng)** mở `HistoryDialog`. Với khách mới: hồ sơ và biểu đồ trống, nút bị vô hiệu hóa |
+| Thanh trạng thái | `QStatusBar` | Ghi chú về mức phù hợp, số album đã gợi ý, thời gian xử lý |
+
+**Luồng gợi ý**
+- *Khách đã có:* loại album đã mua (lấy toàn bộ từ DB) → chấm điểm bằng mô hình đã chọn → lý do → track chưa mua xếp bằng T2.
+- *Khách mới:* chỉ dùng độ phổ biến. Album được giữ nếu thuộc ít nhất một thể loại đã chọn; theo quốc gia nếu có.
+- Nút Gợi ý bị khóa và con trỏ chờ trong lúc worker chạy; kết quả quay về qua `pyqtSignal`.
+
+### 9.2 Tab Kết quả mô hình (FR-14)
+
+| Thành phần | Nội dung |
 |---|---|
-| Thanh điều khiển | Ô chọn mô hình từng cấp (mặc định theo kết quả validation), ô chọn phương pháp hòa giải (mặc định R2), nút **Dự báo** |
-| Tab **Tổng** | Đồ thị doanh thu tháng 2009–2013 và dự báo 12 tháng 2014 kèm dải 80%; thẻ tóm tắt: tổng 12 tháng dự báo, so với 12 tháng gần nhất |
-| Tab **Album** | Ô tìm album (theo tên hoặc nghệ sĩ), bộ lọc thể loại. Bảng: #, album, nghệ sĩ, thể loại, doanh thu 12 tháng gần nhất, dự báo 12 tháng, khoảng 80%, thay đổi % |
-| Tab **Track** | Chọn album, bảng track của album: track, thể loại, giá, đã bán trước đó (có/không), dự báo 12 tháng, khoảng 80% |
-| Đồ thị chi tiết | Lịch sử doanh thu theo năm và dự báo của đối tượng đang chọn (tổng, album hoặc track) |
-| Hộp **Độ tin cậy** | Hiển thị RMSE/WAPE test của mô hình đang chọn ở cấp tương ứng và ghi chú "dự báo từng track rất nhiễu" |
-| Thanh trạng thái | Phương pháp hòa giải đang dùng, kiểm tra nhất quán (`Σ track = album = tổng`) |
+| Bảng chỉ số | Đọc `metrics_album.csv`: mô hình, Recall@10, NDCG@10, HitRate@10, CI 95% |
+| Biểu đồ so sánh | Cột NDCG@10 kèm thanh lỗi CI cho M1–M7 (`FigureCanvasQTAgg`) |
+| Bảng so sánh cặp | Đọc `paired.csv`: chênh lệch với M3 và với mô hình mặc định, CI, số khách thắng/thua |
+| Độ nhạy điểm cắt | Biểu đồ đường NDCG@10 theo tỉ lệ train 70–90% cho từng mô hình |
+| Track trong album | Bảng và biểu đồ HitRate@3, NDCG@5 của T0, T1, T2 |
 
-**Luồng dự báo**
-- Nạp `models/forecaster.zip` → kiểm tra tên feature → dự báo cấp Tổng (12 tháng) → dự báo album bằng mô hình đã chọn → dự báo track → hòa giải → khoảng 80% → hiển thị.
-- Khi chọn một album, tab Track hiển thị track của album đó với dự báo đã hòa giải.
+Tab chỉ đọc file CSV; nếu thiếu file thì hiện thông báo "Chưa có kết quả, hãy chạy `python -m ml.train`".
+
+### 9.3 Quy ước hiển thị
+- Dùng kiểu `Fusion` để màu sắc và font đồng nhất giữa các máy; dùng `QSplitter` để người dùng kéo giãn các khung.
+- Cột số căn phải, cột chữ căn trái; mọi thông báo bằng tiếng Việt.
+- `Enter` sau khi chọn khách kích hoạt Gợi ý.
 
 ---
 
@@ -384,15 +378,16 @@ Một màn hình `ForecastMainWindow`, gồm:
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
-| 0 | Khảo sát dữ liệu, thử baseline, thiết kế (tài liệu này) | Xong |
-| 1 | `ml/data_prep.py`: làm sạch, chuỗi tháng, origin, kiểm tra rò rỉ | Chưa làm |
-| 2 | `ml/evaluate.py`, baseline F1–F4, A1–A3, K1–K2 | Chưa làm |
-| 3 | F5–F6, A4–A5, K3–K4, tuning, hòa giải, `ml/train.py`, `ml/predict.py`, đóng gói | Chưa làm |
-| 4 | Khoảng dự báo (conformal), CI, so sánh cặp, phân tích lỗi | Chưa làm |
-| 5 | Giao diện một màn hình, ba tab, đồ thị | Chưa làm |
-| 6 | README, cập nhật TECHSPEC bằng kết quả chính thức, báo cáo ngắn | Chưa làm |
+| 0 | Khảo sát dữ liệu, thử nghiệm sơ bộ, thiết kế (tài liệu này) | Xong |
+| 1 | `ml/data_prep.py`: làm sạch, tương tác, chia 80/20 và kiểm tra rò rỉ | Chưa làm |
+| 2 | `ml/evaluate.py`, baseline M1–M4, T0–T1 | Chưa làm |
+| 3 | M6–M7 (CF), tuning trên validation | Chưa làm |
+| 4 | Feature, M5 (14 feature), T2 (13 feature), `train.py`, `predict.py`, `package.py` | Chưa làm |
+| 5 | Đánh giá: CI, so sánh cặp, nhiều seed, độ nhạy điểm cắt, đánh giá track trong album, phân tích lỗi | Chưa làm |
+| 6 | Giao diện PyQt6 (tab Gợi ý, tab Kết quả mô hình) | Chưa làm |
+| 7 | README, cập nhật mục 7 bằng kết quả chính thức, báo cáo ngắn | Chưa làm |
 
-**Bàn giao:** mã nguồn, `databases/Chinook_Sqlite.sqlite`, `models/forecaster.zip`, `requirements.txt`, file `.ui` và `.py` sinh ra, các CSV trong `artifacts/`, `README.md`, tài liệu này.
+**Bàn giao:** mã nguồn, `databases/Chinook_Sqlite.sqlite`, `models/recommender.zip`, `requirements.txt`, file `.ui` và `.py` sinh ra, các CSV trong `artifacts/`, `README.md`, tài liệu này.
 
 ---
 
@@ -400,34 +395,32 @@ Một màn hình `ForecastMainWindow`, gồm:
 
 | Rủi ro | Giảm thiểu |
 |---|---|
-| Doanh thu Tổng gần hằng số, mô hình học máy không thắng baseline | Giữ F2/F3 làm baseline bắt buộc; ghi nhận kết luận đúng như đo được; không ép mô hình phức tạp |
-| Dữ liệu nhỏ (60 tháng, 59 customer) → kết quả dao động | Backtest nhiều origin, bootstrap theo album, so sánh cặp, báo cáo CI |
-| Chuỗi tháng cấp album/track quá thưa | Dự báo theo cửa sổ 12 tháng, không theo tháng |
-| Nhãn train chồng lấn (origin cách 6 tháng, nhãn 12 tháng) làm CI quá hẹp | Ghi nhận; chọn tham số bằng validation tách riêng; không dùng CI như bằng chứng tuyệt đối |
-| Rò rỉ dữ liệu | Feature chỉ dùng ≤ origin; `assert` về ngày; nhãn train kết thúc trước origin đánh giá |
-| Dùng MAE ở cấp Track cho kết quả sai lệch | Dùng RMSE, độ lệch Poisson, WAPE theo nhóm, hit@K; nêu rõ trong §7 |
-| Tổng ba cấp không khớp nhau | Hòa giải R1–R3, `assert` nhất quán (NFR-07) |
-| Catalog không có ngày phát hành, album mới không dự báo được | Ghi nhận hạn chế; ngoài phạm vi |
-| Tháng 12/2013 chưa đủ tháng | Ghi chú trong báo cáo làm sạch; doanh thu tháng này vẫn ở mức bình thường |
-| Khoảng dự báo dựa trên ít điểm validation | Báo cáo độ phủ thực tế trên test; chấp nhận 65–95% |
+| Dữ liệu nhỏ → kết quả dao động | CI bootstrap, nhiều seed, so sánh cặp, độ nhạy điểm cắt |
+| M5 không vượt M6 có ý nghĩa thống kê | Ghi nhận đúng khoảng tin cậy; chọn mô hình đơn giản hơn làm mặc định |
+| Khảo sát sơ bộ đã xem test và thử vài tham số nên số liệu lạc quan | Tham số chỉ chọn trên validation trong pipeline chính; số sơ bộ ghi rõ là chưa chính thức; kết quả ít nhạy với tham số (§7.2) |
+| Hiệu ứng "ít người mua trước" ở track có thể là đặc điểm của cách sinh dữ liệu, không tổng quát | Ghi nhận là giả thuyết, kiểm tra ở phân tích lỗi, không tuyên bố tổng quát hóa |
+| Mẫu đánh giá track trong album nhỏ (267 cặp) | CI bootstrap theo customer; kết luận thận trọng |
+| CF thiên về album phổ biến | Báo cáo Coverage và tỉ lệ album phổ biến trong danh sách (§7.5) |
+| Rò rỉ dữ liệu | Thống kê và ma trận CF chỉ trên cửa sổ tương ứng; track đi theo album; `assert` trong `data_prep.py` |
+| Overfit khi tune | Validation tách riêng, lưới nhỏ |
+| Các điểm cắt khác 80% bị dùng để chọn mô hình | Chỉ báo cáo độ nhạy, không dùng chọn mô hình hay tham số |
 | Pickle có thể chạy code tùy ý | Chỉ nạp file do dự án tạo ra (NFR-06) |
 | Model cũ không khớp code | Kiểm tra tên feature khi nạp; báo lỗi và hướng dẫn chạy lại `ml.train` |
 | Dữ liệu mới không tự vào model | Phải đưa dữ liệu vào DB và huấn luyện lại |
+| Lẫn PyQt6 và PySide6 trong một môi trường | `requirements.txt` chỉ khai báo PyQt6 |
 
 ---
 
 ## 12. Các quyết định đã chốt
 
-- Ba cấp dự báo: **Tổng (theo tháng), Album, Track**, horizon 12 tháng, doanh thu = `UnitPrice × Quantity`.
-- Album/Track dự báo theo **cửa sổ 12 tháng** tại từng origin (chuỗi tháng quá thưa); Tổng dự báo theo tháng.
-- Chia theo **origin thời gian**: test origin 2012-12-31 (nhãn 2013), validation origin 2011-12-31 (nhãn 2012); không chia ngẫu nhiên.
-- Track dự báo bằng phân bổ từ album và mô hình Tweedie với feature của album; không dựng chuỗi thời gian riêng cho từng track.
-- Mô hình: classical ML (baseline, Poisson GLM, ETS) và LightGBM Tweedie; không deep learning.
-- Hòa giải phân cấp bắt buộc; phương pháp mặc định dự kiến R2 (top-down tỉ lệ), xác nhận bằng validation.
-- Cấp Tổng: mô hình mặc định là mô hình thắng trên validation; dự kiến F2 (Median). Ghi nhận trung thực nếu mô hình học máy không vượt baseline.
-- Chỉ số: RMSE, WAPE, bias, độ lệch Tweedie/Poisson, hit@K; không dùng MAE làm chỉ số chính cho Track.
-- Huấn luyện offline bằng `python -m ml.train`. Ứng dụng chỉ suy luận từ `models/forecaster.zip`.
-- UI: Qt Designer + PySide6, tiếng Việt, một màn hình ba tab, cấu trúc `ui / dal / models / ml / test`.
+- Đơn vị gợi ý chính: **album**. Track được xếp hạng trong album đã chọn, không gợi ý độc lập, và được đánh giá trong đúng bối cảnh đó.
+- **Giữ chia 80/20 theo thời gian từng customer** (`n_train = round(0.8 × n)`, 1.041 / 260); track đi theo album. Các điểm cắt khác chỉ để báo cáo độ nhạy.
+- Mô hình: classical ML (baseline, CF Item-kNN và EASE) và LightGBM LambdaRank; không deep learning.
+- Ứng viên là toàn bộ album chưa mua; không lấy mẫu âm.
+- Mô hình album mặc định chọn theo NDCG@10 validation giữa M5, M6, M7; ưu tiên mô hình đơn giản khi không khác biệt có ý nghĩa.
+- Huấn luyện offline bằng `python -m ml.train`. Ứng dụng chỉ suy luận từ `models/recommender.zip`.
+- Đóng gói bằng zip chứa pickle.
+- UI: **PyQt6** + Qt Designer, tiếng Việt, một cửa sổ hai tab (Gợi ý, Kết quả mô hình), `QTableWidget`, tác vụ nặng chạy `QThread`.
+- Cấu trúc thư mục: `connectors / models / dal / ml / ui / test / artifacts`, mỗi màn hình có `.ui`, `.py` sinh tự động (`pyuic6`) và `*Ex.py`.
 - Không đóng gói `.exe`.
-
-**Giả định cần xác nhận:** horizon 12 tháng và đơn vị "doanh thu" tính theo dòng hóa đơn (không trừ chi phí/thuế); nếu muốn horizon 6 tháng hoặc dự báo theo quý thì chỉ đổi `HORIZON_MONTHS` và danh sách origin trong `config.py`.
+- Mức phù hợp hiển thị tương đối trong danh sách, không hiển thị điểm thô.
