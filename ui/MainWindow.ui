@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>1180</width><height>780</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>Chinook — Hệ gợi ý Track / Album</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="layoutMain">
+    <item>
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="currentIndex"><number>0</number></property>
+
+      <!-- Tab 1: gợi ý cho khách hàng -->
+      <widget class="QWidget" name="tabRecommend">
+       <attribute name="title"><string>Gợi ý cho khách hàng</string></attribute>
+       <layout class="QVBoxLayout" name="layoutTab1" stretch="0,4,3">
+        <item>
+         <widget class="QGroupBox" name="grpOptions">
+          <property name="title"><string>Tùy chọn</string></property>
+          <layout class="QVBoxLayout" name="layoutOptions">
+           <item>
+            <layout class="QHBoxLayout" name="layoutCustomer">
+             <item><widget class="QLabel" name="lblCustomer"><property name="text"><string>Khách hàng:</string></property></widget></item>
+             <item><widget class="QComboBox" name="cboCustomer"><property name="minimumWidth"><number>240</number></property></widget></item>
+             <item><widget class="QLabel" name="lblCountry"><property name="text"><string>Quốc gia: —</string></property></widget></item>
+             <item><widget class="QLabel" name="lblBought"><property name="text"><string>Đã mua: —</string></property></widget></item>
+             <item><spacer name="spacerCustomer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="layoutControls">
+             <item><widget class="QLabel" name="lblKind"><property name="text"><string>Đối tượng:</string></property></widget></item>
+             <item><widget class="QRadioButton" name="rdoTrack"><property name="text"><string>Track</string></property><property name="checked"><bool>true</bool></property></widget></item>
+             <item><widget class="QRadioButton" name="rdoAlbum"><property name="text"><string>Album</string></property></widget></item>
+             <item><widget class="QLabel" name="lblModel"><property name="text"><string>Mô hình:</string></property></widget></item>
+             <item><widget class="QComboBox" name="cboModel"><property name="minimumWidth"><number>220</number></property></widget></item>
+             <item><widget class="QLabel" name="lblTopK"><property name="text"><string>Top-K:</string></property></widget></item>
+             <item><widget class="QSpinBox" name="spinK"><property name="minimum"><number>1</number></property><property name="maximum"><number>50</number></property><property name="value"><number>10</number></property></widget></item>
+             <item><widget class="QPushButton" name="btnRecommend"><property name="text"><string>Gợi ý</string></property></widget></item>
+             <item><spacer name="spacerControls"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSplitter" name="splitTables">
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <widget class="QGroupBox" name="grpHistory">
+           <property name="title"><string>Lịch sử mua (gồm cả hóa đơn cuối — tập test mà mô hình chưa thấy)</string></property>
+           <layout class="QVBoxLayout" name="layoutHistory">
+            <item><widget class="QTableView" name="tblHistory"/></item>
+           </layout>
+          </widget>
+          <widget class="QGroupBox" name="grpResult">
+           <property name="title"><string>Kết quả gợi ý</string></property>
+           <layout class="QVBoxLayout" name="layoutResult">
+            <item><widget class="QTableView" name="tblResult"/></item>
+           </layout>
+          </widget>
+          <widget class="QGroupBox" name="grpDetail">
+           <property name="title"><string>Chi tiết lý do</string></property>
+           <layout class="QVBoxLayout" name="layoutDetail">
+            <item><widget class="QTextBrowser" name="txtDetail"><property name="placeholderText"><string>Bấm vào một dòng gợi ý để xem chi tiết lý do.</string></property></widget></item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="grpChart">
+          <property name="title"><string>Cơ cấu thể loại khách đã mua</string></property>
+          <layout class="QVBoxLayout" name="layoutChart">
+           <item><widget class="QWidget" name="chartHost"/></item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- Tab 2: so sánh mô hình -->
+      <widget class="QWidget" name="tabCompare">
+       <attribute name="title"><string>So sánh mô hình</string></attribute>
+       <layout class="QVBoxLayout" name="layoutTab2" stretch="0,1">
+        <item>
+         <layout class="QHBoxLayout" name="layoutCompareControls">
+          <item><widget class="QLabel" name="lblLevel"><property name="text"><string>Đối tượng:</string></property></widget></item>
+          <item><widget class="QComboBox" name="cboLevel"/></item>
+          <item><widget class="QLabel" name="lblGroup"><property name="text"><string>Nhóm test:</string></property></widget></item>
+          <item><widget class="QComboBox" name="cboGroup"/></item>
+          <item><widget class="QLabel" name="lblMetric"><property name="text"><string>Chỉ số:</string></property></widget></item>
+          <item><widget class="QComboBox" name="cboMetric"/></item>
+          <item><spacer name="spacerCompare"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QSplitter" name="splitCompare">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <widget class="QGroupBox" name="grpMetrics">
+           <property name="title"><string>Trung bình [khoảng tin cậy bootstrap 95 %] trên test</string></property>
+           <layout class="QVBoxLayout" name="layoutMetrics">
+            <item><widget class="QTableView" name="tblMetrics"/></item>
+           </layout>
+          </widget>
+          <widget class="QGroupBox" name="grpCompareChart">
+           <property name="title"><string>Biểu đồ (thanh sai số = CI 95 %)</string></property>
+           <layout class="QVBoxLayout" name="layoutCompareChart">
+            <item><widget class="QWidget" name="chartHostCompare"/></item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- Tab 3: thông tin dữ liệu và mô hình -->
+      <widget class="QWidget" name="tabInfo">
+       <attribute name="title"><string>Thông tin dữ liệu &amp;&amp; mô hình</string></attribute>
+       <layout class="QHBoxLayout" name="layoutTab3">
+        <item>
+         <widget class="QGroupBox" name="grpDataInfo">
+          <property name="title"><string>Thống kê dữ liệu</string></property>
+          <layout class="QVBoxLayout" name="layoutDataInfo">
+           <item><widget class="QPlainTextEdit" name="txtDataInfo"><property name="readOnly"><bool>true</bool></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="grpModelInfo">
+          <property name="title"><string>Gói mô hình</string></property>
+          <layout class="QVBoxLayout" name="layoutModelInfo">
+           <item><widget class="QPlainTextEdit" name="txtModelInfo"><property name="readOnly"><bool>true</bool></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
